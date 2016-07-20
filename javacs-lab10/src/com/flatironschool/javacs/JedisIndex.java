@@ -1,6 +1,7 @@
 package com.flatironschool.javacs;
 
 import java.io.IOException;
+
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
@@ -67,8 +68,8 @@ public class JedisIndex {
 	 * @return Set of URLs.
 	 */
 	public Set<String> getURLs(String term) {
-        // FILL THIS IN!
-		return null;
+        Set<String> mySet = jedis.smembers(urlSetKey(term));
+		return mySet;
 	}
 
     /**
@@ -78,8 +79,16 @@ public class JedisIndex {
 	 * @return Map from URL to count.
 	 */
 	public Map<String, Integer> getCounts(String term) {
-        // FILL THIS IN!
-		return null;
+		// get urls
+		Set<String> urlSet = getURLs(term);
+		// create and fill map that has urls as keys and counts as values
+		Map<String, Integer> myMap = new HashMap<String, Integer>();
+		// add counts and urls to HashMap
+		for (String url: urlSet) {
+			Integer count = getCount(url, term);
+			myMap.put(url, count);
+		}
+		return myMap;
 	}
 
     /**
@@ -90,8 +99,11 @@ public class JedisIndex {
 	 * @return
 	 */
 	public Integer getCount(String url, String term) {
-        // FILL THIS IN!
-		return null;
+		// go to this url and search for term and count
+		String key1 = termCounterKey(url);
+		String count = jedis.hget(key1, term);
+		int convert = Integer.parseInt(count);
+		return convert;
 	}
 
 
@@ -102,7 +114,28 @@ public class JedisIndex {
 	 * @param paragraphs  Collection of elements that should be indexed.
 	 */
 	public void indexPage(String url, Elements paragraphs) {
-        // FILL THIS IN!
+		// map all terms on the url page to number of times it appears on page
+		TermCounter termMap = new TermCounter(url);
+		termMap.processElements(paragraphs);
+		pushTermCounterToRedis(termMap);
+	}
+	
+	/*
+	 * Method that ...
+	 */
+	public List<Object> pushTermCounterToRedis(TermCounter termMap) {
+		String url = termMap.getLabel(); // gets the url for the TermCounter
+		String hashname = termCounterKey(url); // Find the hashname for the url
+		// make program more efficient by providing all jedis methods but won't execute yet
+		Transaction eff = jedis.multi(); // returns a Transaction object	
+		for (String term: termMap.keySet()) { // iterates through each term in the set of terms in the TermCounter object
+			Integer termCount = termMap.get(term); // returns count of the term
+			String strCountTerm = termCount.toString();
+			eff.hset(hashname, term, strCountTerm); // adds the term and term count (as a string) into the set with the hashname created earlier
+			eff.sadd(urlSetKey(term), url); // adds elements to a jedis set
+		}
+		List<Object> store = eff.exec(); // executes all jedis methods added to the Transaction object in the previous lines
+		return store;
 	}
 
 	/**
